@@ -183,6 +183,30 @@ jobs:
             x64)     echo "$info" | grep -Eq 'x86_64' || exit 1 ;;
           esac
 
+      - name: Rename updater artifacts with version and arch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE_MACOS="app/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          TAR="$(find "$BUNDLE_MACOS" -maxdepth 1 -name '*.app.tar.gz' -print -quit)"
+          if [ -z "$TAR" ]; then
+            echo "::error::no .app.tar.gz found in $BUNDLE_MACOS"
+            exit 1
+          fi
+          DIR="$(dirname "$TAR")"
+          BASE="$(basename "$TAR" .app.tar.gz)"
+          VER="${{ needs.matrix.outputs.tag }}"
+          VER="${VER#v}"
+          TARGET_NAME="${BASE}_${VER}_${{ matrix.arch }}.app.tar.gz"
+          mv "$TAR" "$DIR/$TARGET_NAME"
+          if [ -f "$TAR.sig" ]; then
+            mv "$TAR.sig" "$DIR/$TARGET_NAME.sig"
+          else
+            echo "::error::missing signature file: $TAR.sig"
+            exit 1
+          fi
+          echo "Renamed updater artifact to $TARGET_NAME and $TARGET_NAME.sig"
+
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.distribution }}-${{ matrix.arch }}
