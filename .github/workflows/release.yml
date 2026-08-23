@@ -354,6 +354,7 @@ jobs:
           find artifacts -type f | sort
           ( cd artifacts && find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.deb' \
             -o -name '*.rpm' -o -name '*.app.tar.gz' \) -exec sha256sum {} \; ) | sort > CHECKSUMS.txt
+          { echo '## SHA-256 Checksums'; echo '```'; cat CHECKSUMS.txt; echo '```'; } > RELEASE_BODY.md
       - name: Generate updater manifests
         run: |
           node .github/scripts/gen-update-manifests.mjs \
@@ -369,7 +370,7 @@ jobs:
           tag_name: ${{ needs.matrix.outputs.tag }}
           draft: true
           generate_release_notes: true
-          body_path: CHECKSUMS.txt
+          body_path: RELEASE_BODY.md
           append_body: true
           files: |
             artifacts/**/*
