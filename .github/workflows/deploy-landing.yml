@@ -1,0 +1,101 @@
+name: Deploy Landing Page (GitHub Pages)
+
+# Builds the AES-256-GCM encrypted single-file landing page (docs/landing of
+# the PRIVATE source repo forrany/Aider) and publishes it to GitHub Pages as a
+# password-gated download portal for consultants.
+#
+# Triggers:
+#   - workflow_dispatch     — manual deploy (content change, password rotation)
+#   - release published     — refresh on every published release (belt & braces;
+#                             download links are runtime-dynamic anyway)
+#   - repository_dispatch   — sent by forrany/Aider when docs/landing/** changes
+#
+# Required secrets:
+#   SOURCE_REPO_PAT   fine-grained PAT, Contents:Read on forrany/Aider
+#                     (same secret as release.yml)
+#
+# Security notes:
+#   - Only the ENCRYPTED index.html is ever published. The plaintext
+#     source.html and the gate password never leave the private repo.
+#   - The gate password lives solely in docs/landing/build_encrypted.py of
+#     forrany/Aider; rotating it = edit + push (auto redeploy via dispatch).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "forrany/Aider ref to build from (branch/sha)"
+        required: false
+        default: "aside"
+        type: string
+  repository_dispatch:
+    types: [landing]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve source ref
+        id: ref
+        env:
+          INPUT_REF: ${{ github.event.inputs.ref }}
+          PAYLOAD_REF: ${{ github.event.client_payload.ref }}
+        run: |
+          ref="${INPUT_REF:-${PAYLOAD_REF:-aside}}"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Building landing page from forrany/Aider@$ref"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: forrany/Aider
+          ref: ${{ steps.ref.outputs.ref }}
+          token: ${{ secrets.SOURCE_REPO_PAT }}
+          path: src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build encrypted landing page
+        working-directory: src
+        run: |
+          pip install --quiet pycryptodome
+          python3 docs/landing/build_encrypted.py
+          test -s docs/landing/index.html
+
+      - name: Stage site (encrypted single file only)
+        run: |
+          mkdir -p site
+          cp src/docs/landing/index.html site/index.html
+          touch site/.nojekyll
+          # Hard guard: refuse to publish anything that leaks plaintext assets
+          if grep -q 'assets/app-preview' site/index.html; then
+            echo "::error::plaintext asset reference found, aborting"; exit 1
+          fi
+          ls -la site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
