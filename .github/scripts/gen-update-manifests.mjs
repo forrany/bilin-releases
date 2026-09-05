@@ -72,12 +72,13 @@ export function buildManifest({ dist, version, artifacts, downloadBase }) {
   };
 }
 
-export function generateManifests({ artifactsDir, outDir, tag, dists, repo }) {
+export function generateManifests({ artifactsDir, outDir, tag, dists, repo, proxy = "https://9dok5otstde5w.sina.dev/" }) {
   if (!/^v\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$/.test(tag || "")) fail(`invalid tag: ${tag}`);
   if (!repo) fail(`invalid repo: ${repo}`);
   const version = tag.slice(1);
   const artifacts = indexArtifacts(artifactsDir);
-  const downloadBase = `https://github.com/${repo}/releases/download/${tag}`;
+  const prefix = proxy ? (proxy.endsWith("/") ? proxy : `${proxy}/`) : "";
+  const downloadBase = `${prefix}https://github.com/${repo}/releases/download/${tag}`;
   fs.mkdirSync(outDir, { recursive: true });
   const written = [];
   for (const dist of dists) {
@@ -102,6 +103,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       outDir: get("--out"),
       tag: get("--tag"),
       repo: get("--repo"),
+      proxy: get("--proxy"),
       dists: (get("--dist") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     };
     if (!opts.dists.length) fail("missing required option --dist");

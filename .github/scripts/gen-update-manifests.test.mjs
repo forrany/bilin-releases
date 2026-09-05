@@ -44,10 +44,10 @@ test("generates latest-aside.json and latest-bilin.json with absolute urls and s
     ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"]);
   assert.equal(aside.platforms["darwin-aarch64"].signature, SIG);
   assert.equal(aside.platforms["darwin-aarch64"].url,
-    "https://github.com/forrany/bilin-releases/releases/download/v1.4.2/Aside_1.4.2_aarch64.app.tar.gz");
+    "https://9dok5otstde5w.sina.dev/https://github.com/forrany/bilin-releases/releases/download/v1.4.2/Aside_1.4.2_aarch64.app.tar.gz");
   const bilin = JSON.parse(fs.readFileSync(path.join(out, "latest-bilin.json"), "utf8"));
   assert.equal(bilin.platforms["windows-x86_64"].url,
-    "https://github.com/forrany/bilin-releases/releases/download/v1.4.2/Bilin_1.4.2_x64-setup.exe");
+    "https://9dok5otstde5w.sina.dev/https://github.com/forrany/bilin-releases/releases/download/v1.4.2/Bilin_1.4.2_x64-setup.exe");
 });
 
 test("subset of distributions writes only its manifest", () => {
