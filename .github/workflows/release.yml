@@ -316,10 +316,24 @@ jobs:
       - name: Download Node.js runtime
         run: cd app/backend && python scripts/download_node.py
 
-      # BtbN's LGPL static build, checked against the checksums published for
-      # the same release (see docs/adr/0012 in the source repo).
-      - name: Obtain LGPL ffmpeg
-        shell: bash
+      # LGPL-only ffmpeg, built from the pinned signed source tarball (see
+      # docs/adr/0012 in the source repo). Windows needs the MSYS2 MINGW64
+      # toolchain because configure is a POSIX shell script and the mingw
+      # runtime must be linked statically.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          # The launcher otherwise isolates PATH, hiding the Windows Python
+          # installed by setup-python; the build needs both toolchains.
+          path-type: inherit
+          install: >-
+            mingw-w64-x86_64-gcc
+            make
+            nasm
+            diffutils
+
+      - name: Build and verify LGPL ffmpeg
+        shell: msys2 {0}
         run: |
           set -euo pipefail
           cd app/backend
@@ -327,13 +341,9 @@ jobs:
             echo "::error::scripts/download_ffmpeg.py is missing from this ref. The LGPL ffmpeg bundling must be merged into 'aside' before cutting a release."
             exit 1
           fi
-          python scripts/download_ffmpeg.py
-
-      - name: Verify LGPL ffmpeg resource
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd app/backend
+          # A bare `bash` would resolve to C:\Windows\System32\bash.exe, the
+          # WSL launcher, instead of the msys2 shell that has the toolchain.
+          python scripts/download_ffmpeg.py --shell "$(cygpath -w /usr/bin/sh)"
           python scripts/verify_ffmpeg_resource.py --expect-arch x64
 
       - name: Build Tauri (NSIS + signed updater artifact)
