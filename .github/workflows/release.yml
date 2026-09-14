@@ -152,6 +152,33 @@ jobs:
       - name: Download Node.js runtime
         run: cd app/backend && python3 scripts/download_node.py --platform ${{ matrix.node_platform }}
 
+      # LGPL-only ffmpeg (see docs/adr/0012 of the source repo). macOS has no
+      # trustworthy LGPL prebuilt, so it is built from the pinned, GPG-signed
+      # source tarball; x86_64 needs nasm to assemble SIMD.
+      - name: Install nasm (required by the x86_64 ffmpeg source build)
+        if: matrix.arch == 'x64'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install nasm
+
+      - name: Obtain LGPL ffmpeg
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd app/backend
+          if [ ! -f scripts/download_ffmpeg.py ]; then
+            echo "::error::scripts/download_ffmpeg.py is missing from this ref. The LGPL ffmpeg bundling must be merged into 'aside' before cutting a release."
+            exit 1
+          fi
+          python3 scripts/download_ffmpeg.py --platform ${{ matrix.node_platform }}
+
+      - name: Verify LGPL ffmpeg resource
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd app/backend
+          python3 scripts/verify_ffmpeg_resource.py --expect-arch ${{ matrix.arch }}
+
       - name: Build Tauri (dmg + signed updater bundle)
         env:
           APPLE_SIGNING_IDENTITY: "-"
@@ -182,6 +209,28 @@ jobs:
             aarch64) echo "$info" | grep -Eq 'arm64|aarch64' || exit 1 ;;
             x64)     echo "$info" | grep -Eq 'x86_64' || exit 1 ;;
           esac
+
+      # The resource being correct on disk is not the same as it surviving
+      # packaging and signing: run the bundled copy from inside the .app.
+      - name: Verify bundled ffmpeg inside the app
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(find "app/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos" \
+            -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$APP" ]; then
+            echo "::error::no .app bundle found after tauri build"; exit 1
+          fi
+          FFMPEG_DIR="$GITHUB_WORKSPACE/$APP/Contents/Resources/ffmpeg"
+          if [ ! -d "$FFMPEG_DIR" ]; then
+            echo "::error::ffmpeg resource is missing from the app bundle at $FFMPEG_DIR"
+            ls -la "$GITHUB_WORKSPACE/$APP/Contents/Resources" || true
+            exit 1
+          fi
+          cd app/backend
+          python3 scripts/verify_ffmpeg_resource.py \
+            --resource-dir "$FFMPEG_DIR" \
+            --expect-arch ${{ matrix.arch }}
 
       - name: Rename updater artifacts with version and arch
         shell: bash
@@ -267,6 +316,26 @@ jobs:
       - name: Download Node.js runtime
         run: cd app/backend && python scripts/download_node.py
 
+      # BtbN's LGPL static build, checked against the checksums published for
+      # the same release (see docs/adr/0012 in the source repo).
+      - name: Obtain LGPL ffmpeg
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd app/backend
+          if [ ! -f scripts/download_ffmpeg.py ]; then
+            echo "::error::scripts/download_ffmpeg.py is missing from this ref. The LGPL ffmpeg bundling must be merged into 'aside' before cutting a release."
+            exit 1
+          fi
+          python scripts/download_ffmpeg.py
+
+      - name: Verify LGPL ffmpeg resource
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd app/backend
+          python scripts/verify_ffmpeg_resource.py --expect-arch x64
+
       - name: Build Tauri (NSIS + signed updater artifact)
         shell: bash
         env:
@@ -307,7 +376,7 @@ jobs:
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
             rpm file patchelf build-essential curl wget libssl-dev \
-            libgtk-3-dev libsoup-3.0-dev libxdo-dev
+            libgtk-3-dev libsoup-3.0-dev libxdo-dev nasm
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - uses: actions/setup-node@v4
@@ -346,6 +415,24 @@ jobs:
           cd app/backend
           source venv/bin/activate
           python scripts/download_node.py
+
+      - name: Obtain LGPL ffmpeg (built from the pinned source tarball)
+        run: |
+          set -euo pipefail
+          cd app/backend
+          if [ ! -f scripts/download_ffmpeg.py ]; then
+            echo "::error::scripts/download_ffmpeg.py is missing from this ref. The LGPL ffmpeg bundling must be merged into 'aside' before cutting a release."
+            exit 1
+          fi
+          source venv/bin/activate
+          python scripts/download_ffmpeg.py
+
+      - name: Verify LGPL ffmpeg resource
+        run: |
+          set -euo pipefail
+          cd app/backend
+          source venv/bin/activate
+          python scripts/verify_ffmpeg_resource.py --expect-arch x86_64
 
       - name: Build Tauri (deb + rpm, unsigned)
         run: |
