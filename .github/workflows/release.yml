@@ -12,6 +12,17 @@ name: Release Desktop (Aside / Bilin)
 #   TAURI_SIGNING_PRIVATE_KEY          Tauri updater minisign private key
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 #
+# Optional secrets — the search MCP server the client's web_search calls.
+# They are passed to the PyInstaller step only; openyak.spec writes whichever
+# are set into the bundle (app/build_secrets.py in the source repo). With the
+# endpoint unset the client searches with DuckDuckGo only (the step then emits
+# a warning annotation).
+#   WEB_SEARCH_MCP_URL     https://magpie-search.webartmastery.online/mcp/magpie/web-search
+#   WEB_SEARCH_MCP_TOKEN   bearer token, without the "Bearer " prefix
+# Both ship inside public installers and can be extracted from them: the
+# token must be good for search only, rate-limited and revocable on the
+# server. Upstream search API keys and quota live on that server, not here.
+#
 # UNSIGNED builds otherwise: ad-hoc macOS signing ("-"), no notarization /
 # Windows codesign yet (same as source repo policy).
 
@@ -120,6 +131,9 @@ jobs:
           NEXT_PUBLIC_ASIDE_DISTRIBUTION: ${{ matrix.distribution }}
 
       - name: Build backend (PyInstaller)
+        env:
+          OPENYAK_WEB_SEARCH_MCP_URL: ${{ secrets.WEB_SEARCH_MCP_URL }}
+          OPENYAK_WEB_SEARCH_MCP_TOKEN: ${{ secrets.WEB_SEARCH_MCP_TOKEN }}
         run: |
           cd app/backend
           python -m venv venv
@@ -308,6 +322,9 @@ jobs:
           NEXT_PUBLIC_ASIDE_DISTRIBUTION: ${{ matrix.distribution }}
 
       - name: Build backend (PyInstaller)
+        env:
+          OPENYAK_WEB_SEARCH_MCP_URL: ${{ secrets.WEB_SEARCH_MCP_URL }}
+          OPENYAK_WEB_SEARCH_MCP_TOKEN: ${{ secrets.WEB_SEARCH_MCP_TOKEN }}
         shell: bash
         run: |
           cd app/backend
@@ -414,6 +431,9 @@ jobs:
           NEXT_PUBLIC_ASIDE_DISTRIBUTION: ${{ matrix.distribution }}
 
       - name: Build backend (PyInstaller)
+        env:
+          OPENYAK_WEB_SEARCH_MCP_URL: ${{ secrets.WEB_SEARCH_MCP_URL }}
+          OPENYAK_WEB_SEARCH_MCP_TOKEN: ${{ secrets.WEB_SEARCH_MCP_TOKEN }}
         run: |
           cd app/backend
           python -m venv venv
