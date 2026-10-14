@@ -6,9 +6,17 @@ name: Deploy Landing Page (GitHub Pages)
 #
 # Triggers:
 #   - workflow_dispatch     — manual deploy (content change, password rotation)
-#   - release published     — refresh on every published release (belt & braces;
-#                             download links are runtime-dynamic anyway)
 #   - repository_dispatch   — sent by forrany/Aider when docs/landing/** changes
+#                             and by landing-relay.yml when a release is
+#                             published
+#
+# All triggers here run on the DEFAULT BRANCH, which is a hard requirement:
+# the `github-pages` environment enforces a deployment branch policy that only
+# admits `main`. A `release: published` run has ref refs/tags/vX.Y.Z, so that
+# job is rejected before its first step (0 steps, ~1s) — which is exactly how
+# every release-triggered deploy failed from v1.4.6 through v1.5.1. Publishing
+# a release therefore relays a `landing` repository_dispatch instead; see
+# landing-relay.yml.
 #
 # Required secrets:
 #   SOURCE_REPO_PAT   fine-grained PAT, Contents:Read on forrany/Aider
@@ -30,8 +38,6 @@ on:
         type: string
   repository_dispatch:
     types: [landing]
-  release:
-    types: [published]
 
 permissions:
   contents: read

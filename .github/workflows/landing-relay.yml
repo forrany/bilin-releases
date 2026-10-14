@@ -1,0 +1,44 @@
+name: Relay published release to landing deploy
+
+# A `release: published` event runs on ref refs/tags/vX.Y.Z, and the
+# `github-pages` environment only admits the `main` branch. Triggering
+# deploy-landing.yml from the release event directly therefore kills the deploy
+# job before its first step (0 steps, ~1s) — that is how v1.4.6 … v1.5.1 all
+# failed. This relay runs on the tag ref (it asks for no environment), and
+# re-asks for the landing deploy as an explicit `landing` repository_dispatch,
+# which always runs on the default branch and is therefore admitted.
+#
+# `repository_dispatch` is an explicit exception to the "events created by
+# GITHUB_TOKEN do not start new workflow runs" rule, so the default token is
+# enough — no extra PAT to rotate.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # required to POST /repos/{owner}/{repo}/dispatches
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch landing rebuild on the default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          echo "release $TAG published -> requesting landing deploy"
+          for attempt in 1 2 3; do
+            if gh api -X POST "/repos/${REPO}/dispatches" \
+                 -f event_type=landing \
+                 -f 'client_payload[ref]=aside'; then
+              echo "::notice::landing deploy dispatched for release $TAG"
+              exit 0
+            fi
+            echo "dispatch attempt $attempt failed, retrying"
+            sleep 5
+          done
+          echo "::error::could not dispatch the landing deploy"
+          exit 1
