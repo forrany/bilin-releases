@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { generateManifests } from "./gen-update-manifests.mjs";
+import { execFileSync } from "node:child_process";
+import { extractNotesBody, generateManifests } from "./gen-update-manifests.mjs";
 
 const SIG = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZQo=";
 
@@ -97,4 +98,59 @@ test("invalid tag fails loudly", () => {
     }),
     /invalid tag/,
   );
+});
+
+test("manifest notes default to the placeholder", () => {
+  const out = tmpOut();
+  generateManifests({
+    artifactsDir: makeArtifacts(), outDir: out, tag: "v1.4.2",
+    dists: ["bilin"], repo: "forrany/bilin-releases",
+  });
+  const bilin = JSON.parse(fs.readFileSync(path.join(out, "latest-bilin.json"), "utf8"));
+  assert.equal(bilin.notes, "See the release page for details.");
+});
+
+test("curated notes replace the placeholder in every distribution manifest", () => {
+  const out = tmpOut();
+  const notes = "> 2026-10-12\n\n## 新增\n\n- **长任务**：跑到步数上限会明确说明。";
+  generateManifests({
+    artifactsDir: makeArtifacts(), outDir: out, tag: "v1.4.2", dists: ["base", "bilin"],
+    repo: "forrany/bilin-releases", notes,
+  });
+  for (const stem of ["aside", "bilin"]) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(out, `latest-${stem}.json`), "utf8"));
+    assert.equal(manifest.notes, notes);
+  }
+});
+
+test("extractNotesBody drops only the changelog title line", () => {
+  assert.equal(
+    extractNotesBody("# 比邻 · Aside v1.5.1 更新日志\n\n> 2026-10-12\n\n## 新增\n\n- 一条\n"),
+    "> 2026-10-12\n\n## 新增\n\n- 一条",
+  );
+  // A body that starts with "# " but is not a title-level heading is kept.
+  assert.equal(extractNotesBody("## 新增\n\n- 一条"), "## 新增\n\n- 一条");
+  // No H1 at all.
+  assert.equal(extractNotesBody("- 只有一条"), "- 只有一条");
+  // Nothing but a title = no curated notes.
+  assert.equal(extractNotesBody("# 只有一个标题\n"), "");
+  assert.equal(extractNotesBody(""), "");
+  assert.equal(extractNotesBody(undefined), "");
+  // CRLF files are normalised.
+  assert.equal(extractNotesBody("# T\r\n\r\n- a\r\n"), "- a");
+});
+
+test("--notes-file with nothing but a title fails loudly", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "upd-notes-"));
+  const notesFile = path.join(dir, "1.4.2.md");
+  fs.writeFileSync(notesFile, "# 比邻 · Aside v1.4.2 更新日志\n", "utf8");
+  assert.throws(() => execFileSync(process.execPath, [
+    path.join(import.meta.dirname, "gen-update-manifests.mjs"),
+    "--artifacts", makeArtifacts(),
+    "--out", tmpOut(),
+    "--tag", "v1.4.2",
+    "--dist", "base",
+    "--repo", "forrany/bilin-releases",
+    "--notes-file", notesFile,
+  ]), /no content beyond its title/);
 });

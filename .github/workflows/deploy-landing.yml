@@ -79,17 +79,21 @@ jobs:
           pip install --quiet pycryptodome
           python3 docs/landing/build_encrypted.py
           test -s docs/landing/index.html
+          test -s docs/landing/changelog/index.html
 
-      - name: Stage site (encrypted single file only)
+      - name: Stage site (encrypted pages only)
         run: |
-          mkdir -p site
+          mkdir -p site/changelog
           cp src/docs/landing/index.html site/index.html
+          # The changelog is a second encrypted page at /changelog/ — it is
+          # generated from docs/release-notes/*.md, so it carries no assets.
+          cp src/docs/landing/changelog/index.html site/changelog/index.html
           touch site/.nojekyll
           # Hard guard: refuse to publish anything that leaks plaintext assets
-          if grep -q 'assets/app-preview' site/index.html; then
+          if grep -q 'assets/app-preview' site/index.html site/changelog/index.html; then
             echo "::error::plaintext asset reference found, aborting"; exit 1
           fi
-          ls -la site
+          ls -la site site/changelog
 
       - uses: actions/upload-pages-artifact@v3
         with:

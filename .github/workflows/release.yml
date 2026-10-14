@@ -496,14 +496,37 @@ jobs:
           ( cd artifacts && find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.deb' \
             -o -name '*.rpm' -o -name '*.app.tar.gz' \) -exec sha256sum {} \; ) | sort > CHECKSUMS.txt
           { echo '## SHA-256 Checksums'; echo '```'; cat CHECKSUMS.txt; echo '```'; } > RELEASE_BODY.md
+      - name: Checkout release notes (private source repo)
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: forrany/Aider
+          ref: refs/tags/${{ needs.matrix.outputs.tag }}
+          token: ${{ secrets.SOURCE_REPO_PAT }}
+          path: src
+          sparse-checkout: docs/release-notes
       - name: Generate updater manifests
         run: |
+          set -euo pipefail
+          TAG="${{ needs.matrix.outputs.tag }}"
+          # The advisor-facing notes live in the private source repo
+          # (docs/release-notes/<version>.md) and travel to clients as the
+          # manifest "notes" that the desktop update dialog renders.
+          NOTES_FILE="src/docs/release-notes/${TAG#v}.md"
+          NOTES_ARGS=()
+          if [ -s "$NOTES_FILE" ]; then
+            NOTES_ARGS=(--notes-file "$NOTES_FILE")
+            echo "Using release notes: $NOTES_FILE"
+          else
+            echo "::warning::$NOTES_FILE missing — manifest notes fall back to the placeholder"
+          fi
           node .github/scripts/gen-update-manifests.mjs \
             --artifacts artifacts \
             --out update-manifests \
-            --tag "${{ needs.matrix.outputs.tag }}" \
+            --tag "$TAG" \
             --dist "${{ needs.matrix.outputs.distributions_raw }}" \
-            --repo "${GITHUB_REPOSITORY}"
+            --repo "${GITHUB_REPOSITORY}" \
+            ${NOTES_ARGS[@]+"${NOTES_ARGS[@]}"}
           cat update-manifests/*.json
       - name: Create draft GitHub Release
         uses: softprops/action-gh-release@v2
