@@ -86,8 +86,13 @@ jobs:
         distribution: ${{ fromJSON(needs.matrix.outputs.distributions) }}
         arch: [aarch64, x64]
         include:
+          # GitHub retired the macOS 14 images on 2026-11-02
+          # (actions/runner-images#13518); a `macos-14` job is cancelled within
+          # a second with "configuration 'macos-14-arm64-us-default' is not
+          # supported". Keep this on a current arm64 image — the Intel entry
+          # already uses macos-15-intel.
           - arch: aarch64
-            os: macos-14
+            os: macos-15
             target: aarch64-apple-darwin
             node_platform: Darwin-arm64
           - arch: x64
